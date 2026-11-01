@@ -13,6 +13,11 @@ MAP_SIZE = {
     "숲": (2400, 1600), "마을": (1400, 1000), "교회 밖": (1200, 900), "교회 안": (960, 720),
     "왕실 상점가": (1200, 900), "왕국 기사단": (1000, 760), "왕국 안": (1000, 760), "왕의 방": (900, 650),
 }
+FACTION_AREAS = frozenset(("숲", "교회 밖", "교회 안", "왕실 상점가", "왕국 기사단", "왕국 안", "왕의 방"))
+AREA_SPAWNS = {
+    "숲": (2200, 800), "마을": (100, 500), "교회 밖": (600, 790), "교회 안": (480, 640),
+    "왕실 상점가": (100, 450), "왕국 기사단": (500, 680), "왕국 안": (500, 680), "왕의 방": (450, 590),
+}
 FLOOR_PALETTES = {
     "숲": ("#294633", "#2b4834", "#2d4a35"),
     "마을": ("#78664a", "#79684d", "#7b6a4f"),
@@ -138,6 +143,7 @@ class Game:
             p.setdefault("owned_weapons",[p.get("weapon","낡은 검")]);p.setdefault("owned_armor",[p.get("armor","여행자 옷")])
             p.setdefault("quest",None);p.setdefault("exiled",False);p.setdefault("prayer_due",False)
             p.setdefault("visited_faction",area);p["area"]=area
+            if not isinstance(p["visited_faction"],str) or p["visited_faction"] not in AREA_SPAWNS:return False
             p.setdefault("inventory",[]);p.setdefault("story_flags",[])
             for key in ("owned_weapons","owned_armor","inventory","story_flags"):
                 if not isinstance(p[key],list) or any(not isinstance(item,str) for item in p[key]):return False
@@ -307,12 +313,10 @@ class Game:
             self.say("성문 경비가 길을 막는다. 수인과 방랑자 진영은 왕실 구역에 들어갈 수 없다.");p["x"]=max(80,min(MAP_SIZE[self.area][0]-80,p["x"]));return
         if dest in church_areas and p["exiled"]:
             self.say("교회에서 추방된 방랑자는 교회 땅에 들어갈 수 없다.");return
-        entry={
-            "숲":(2200,800),"마을":(100,500),"교회 밖":(600,790),"교회 안":(480,640),
-            "왕실 상점가":(100,450),"왕국 기사단":(500,680),"왕국 안":(500,680),"왕의 방":(450,590)
-        }
-        p["area"]=dest;p["visited_faction"]=dest;self.area=dest
-        p["x"],p["y"]=entry[dest]
+        p["area"]=dest;self.area=dest
+        if dest in FACTION_AREAS or not p.get("visited_faction"):
+            p["visited_faction"]=dest
+        p["x"],p["y"]=AREA_SPAWNS[dest]
         self.walk_meter=0
         self.spawn_enemies()
         intro={
@@ -837,7 +841,7 @@ class Game:
 
     def exile_church(self):
         p=self.player;p["faction"]="방랑자";p["exiled"]=True;p["prayer_due"]=False
-        self.area="마을";p["area"]="마을";p["x"]=700;p["y"]=500;p["visited_faction"]="마을";self.spawn_enemies()
+        self.area="마을";p["area"]="마을";p["x"]=700;p["y"]=500;p["visited_faction"]="숲";self.spawn_enemies()
         self.say("교회에서 추방되었다. 방랑자 진영으로 편입되어 교회에 다시 들어갈 수 없다.")
 
     def start_battle(self, idx):
@@ -950,11 +954,9 @@ class Game:
             dmg=max(1,e["atk"]-p["def"]+random.randint(-1,2));p["hp"]-=dmg;b["log"]+=f" {e['name']}의 반격! {dmg} 피해.";b["counter_t"]=.35
         if p["hp"]<=0:
             p["hp"]=p["maxhp"];p["gold"]//=2
-            self.area=p["visited_faction"] if p["visited_faction"] in AREAS else "숲"
+            self.area=p["visited_faction"] if p["visited_faction"] in AREA_SPAWNS else "숲"
             p["area"]=self.area
-            entry={"숲":(2200,800),"마을":(100,500),"교회 밖":(600,790),"교회 안":(480,640),
-                   "왕실 상점가":(100,450),"왕국 기사단":(500,680),"왕국 안":(500,680),"왕의 방":(450,590)}
-            p["x"],p["y"]=entry[self.area]
+            p["x"],p["y"]=AREA_SPAWNS[self.area]
             self.mode="world";del self.battle
             self.walk_meter=0;self.spawn_enemies()
             self.say(f"쓰러졌다. 마지막으로 방문한 진영({p['visited_faction']})에서 눈을 떴다. 보유금 절반을 잃었다.",7)
