@@ -506,6 +506,25 @@ class Game:
         text=f"무기: {p['weapon']} (공격 {p['atk']})\n방어구: {p['armor']} (방어 {p['def']})\n종교: {p['religion']}\n회복 붕대: {p['bandages']}개 · {p['gold']}G"
         self.open_dialog("소지품",text,["회복 붕대 사용","무기 바꾸기","방어구 바꾸기","닫기"])
 
+    def use_bandage(self, context="field"):
+        p=self.player
+        if p["bandages"]<=0:
+            message="회복 붕대가 없다. 마을 상점에서 구매할 수 있다." if context=="battle" else "회복 붕대가 없어."
+            if context=="battle":self.battle["log"]=message
+            else:self.say(message)
+            return 0
+        if p["hp"]>=p["maxhp"]:
+            message="체력이 가득 차 있어 회복 붕대를 아꼈다."
+            if context=="battle":self.battle["log"]=message
+            else:self.say(message)
+            return 0
+        healed=min(p["maxhp"]-p["hp"],max(1,round(p["maxhp"]*.12)))
+        p["hp"]+=healed;p["bandages"]-=1
+        if context=="battle":self.battle["log"]=f"회복 붕대를 사용해 HP {healed} 회복."
+        elif context=="inventory":self.say(f"회복 붕대를 사용해 HP {healed} 회복.")
+        else:self.say(f"회복 붕대 사용: HP {healed} 회복.")
+        return healed
+
     def open_equipment_selector(self, slot, page=0):
         p=self.player;weapon=slot=="weapon"
         collection=p.setdefault("owned_weapons" if weapon else "owned_armor",
@@ -799,11 +818,7 @@ class Game:
             return
         if title=="소지품":
             if opt=="회복 붕대 사용":
-                if p["bandages"]>0:
-                    if p["hp"]>=p["maxhp"]:self.say("체력이 가득 차 있어 회복 붕대를 아꼈다.")
-                    else:
-                        healed=max(1,round(p["maxhp"]*.12));p["hp"]=min(p["maxhp"],p["hp"]+healed);p["bandages"]-=1;self.say(f"회복 붕대를 사용해 HP {healed} 회복.")
-                else:self.say("회복 붕대가 없어.")
+                self.use_bandage("inventory")
             elif opt=="무기 바꾸기":
                 self.open_equipment_selector("weapon")
             elif opt=="방어구 바꾸기":
@@ -953,11 +968,7 @@ class Game:
             b["submenu"]=None
         elif action=="defend":b["defending"]=True;b["log"]="방어 자세를 취했다. 이번 적의 공격은 무효가 된다.";b["effect"]="shield";b["effect_t"]=.4
         elif action=="item":
-            if p["bandages"]>0:
-                if p["hp"]>=p["maxhp"]:b["log"]="체력이 가득 차 있어 회복 붕대를 아꼈다."
-                else:
-                    healed=max(1,round(p["maxhp"]*.12));p["hp"]=min(p["maxhp"],p["hp"]+healed);p["bandages"]-=1;b["log"]=f"회복 붕대를 사용해 HP {healed} 회복."
-            else:b["log"]="회복 붕대가 없다. 마을 상점에서 구매할 수 있다."
+            self.use_bandage("battle")
             return
         elif action=="flee":
             faith_bonus=.05 if p.get("religion")=="숲의 신앙" else 0
@@ -1099,10 +1110,7 @@ class Game:
             elif k in ("q","Q"):
                 self.open_dialog("퀘스트 기록",self.quest_journal_text(),["닫기"])
             elif k in ("h","H"):
-                healed=max(1,round(p["maxhp"]*.12))
-                if p["bandages"] and p["hp"]>=p["maxhp"]:self.say("체력이 가득 차 있어 회복 붕대를 아꼈다.")
-                elif p["bandages"]:p["bandages"]-=1;p["hp"]=min(p["maxhp"],p["hp"]+healed);self.say(f"회복 붕대 사용: HP {healed} 회복.")
-                else:self.say("회복 붕대가 없어.")
+                self.use_bandage("field")
         self.draw()
 
     def rect(self,x,y,w,h,fill,outline=None):return {"t":"r","x":x,"y":y,"w":w,"h":h,"c":fill,"o":outline}
