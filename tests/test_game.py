@@ -1074,6 +1074,41 @@ class GameRegressionTests(unittest.TestCase):
         after = (g.wanderers[0]["x"], g.wanderers[0]["y"])
         self.assertNotEqual(before, after)
 
+    def test_forest_random_spawns_are_clear_of_trees_player_and_each_other(self):
+        g = self.new_game()
+        g.area = "숲"
+        g.player.update(area="숲", x=1200, y=800)
+        for seed in range(40):
+            random.seed(seed)
+            g.spawn_enemies()
+            actors = list(g.wanderers) + [e for e in g.enemies if not e.get("human")]
+            for actor in actors:
+                x,y=actor["x"],actor["y"]
+                self.assertFalse(g.collides(x,y), f"spawned inside a tree at {(x,y)} for seed {seed}")
+                self.assertGreaterEqual(((x-g.player["x"])**2+(y-g.player["y"])**2)**.5,160)
+            for i,(x,y) in enumerate((a["x"],a["y"]) for a in actors):
+                for ox,oy in ((a["x"],a["y"]) for a in actors[:i]):
+                    self.assertGreaterEqual(((x-ox)**2+(y-oy)**2)**.5,84)
+
+    def test_ambush_enemy_spawns_outside_nearby_tree_trunk(self):
+        g=self.new_game()
+        g.area="숲";g.player.update(area="숲",x=320,y=413)
+        g.start_ambush()
+        enemy=g.enemies[g.battle["index"]]
+        self.assertFalse(g.collides(enemy["x"],enemy["y"]))
+        self.assertLess(((enemy["x"]-320)**2+(enemy["y"]-413)**2)**.5,100)
+
+    def test_forest_save_migrates_actors_trapped_inside_tree_trunks(self):
+        g=self.new_game()
+        g.area="숲";g.player.update(area="숲",x=1200,y=800)
+        g.enemies=[{"name":"늑대","x":360,"y":413,"hp":20,"maxhp":20,
+                    "atk":5,"level":1,"alive":True,"vx":20,"vy":10,"turn":2}]
+        g.wanderers=[{"x":760,"y":1183,"vx":20,"vy":10,"turn":2,"size":3}]
+        resumed=game.Game()
+        self.assertTrue(resumed.load_snapshot(g.save_snapshot()))
+        self.assertFalse(resumed.collides(resumed.enemies[0]["x"],resumed.enemies[0]["y"]))
+        self.assertFalse(resumed.collides(resumed.wanderers[0]["x"],resumed.wanderers[0]["y"]))
+
     def test_forest_wanderers_and_monsters_stop_at_tree_trunks(self):
         g = self.new_game()
         g.area = "숲"
