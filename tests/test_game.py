@@ -938,6 +938,15 @@ class GameRegressionTests(unittest.TestCase):
         self.assertIn("window.addEventListener('blur',()=>{held.clear();presses.length=0;click=null})",html)
         self.assertIn("addEventListener('click',e=>{e.preventDefault();presses.push(b.dataset.press)})",html)
 
+    def test_web_shell_announces_autosave_failure_and_recovery(self):
+        html=(ROOT/"index.html").read_text(encoding="utf-8")
+        self.assertIn('<div id="saveWarning" role="alert" aria-live="assertive" aria-atomic="true" hidden></div>',html)
+        self.assertIn("function showSaveWarning(message,hideAfter=0)",html)
+        self.assertIn("function writeSave(value){try{localStorage.setItem(SAVE_KEY,value);if(saveFailed)",html)
+        self.assertIn("자동 저장에 실패했습니다. 브라우저 저장 공간을 확인하세요.",html)
+        self.assertIn("자동 저장이 복구되었습니다. 진행 상황이 다시 저장됩니다.",html)
+        self.assertIn("if(!saveFailed){console.warn",html)
+
     def test_web_shell_offers_retry_after_a_runtime_load_error(self):
         html=(ROOT/"index.html").read_text(encoding="utf-8")
         self.assertIn('<section id="error" role="alert" aria-live="assertive">',html)
