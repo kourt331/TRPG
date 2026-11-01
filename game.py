@@ -14,14 +14,14 @@ MAP_SIZE = {
     "왕실 상점가": (1200, 900), "왕국 기사단": (1000, 760), "왕국 안": (1000, 760), "왕의 방": (900, 650),
 }
 FLOOR_PALETTES = {
-    "숲": ("#294633", "#2d4a35", "#315038"),
-    "마을": ("#786347", "#7c674a", "#806b4d"),
-    "교회 밖": ("#64605b", "#68645f", "#6c6863"),
-    "교회 안": ("#747579", "#79797d", "#7e7e82"),
-    "왕실 상점가": ("#69564d", "#6d5a50", "#715e53"),
-    "왕국 기사단": ("#58616a", "#5c656e", "#606972"),
-    "왕국 안": ("#766047", "#7a644b", "#7e684e"),
-    "왕의 방": ("#57474c", "#5b4b50", "#5f4f54"),
+    "숲": ("#294633", "#2b4834", "#2d4a35"),
+    "마을": ("#78664a", "#79684d", "#7b6a4f"),
+    "교회 밖": ("#64605b", "#66625d", "#68645f"),
+    "교회 안": ("#747579", "#76777b", "#78797d"),
+    "왕실 상점가": ("#69564d", "#6b584f", "#6d5a50"),
+    "왕국 기사단": ("#58616a", "#5a636c", "#5c656e"),
+    "왕국 안": ("#766047", "#78624a", "#7a644b"),
+    "왕의 방": ("#57474c", "#59494e", "#5b4b50"),
 }
 WEAPON_BONUS = {"낡은 검":0,"고블린 단검":4,"철검":5,"늑대 송곳니검":7,"사냥꾼 활":8}
 ARMOR_BONUS = {"여행자 옷":0,"방랑자 외투":2,"가죽 갑옷":3,"늑대 털망토":4,"멧돼지 가죽 갑옷":5,"기사 갑옷":6}
@@ -1097,6 +1097,37 @@ class Game:
         else:
             out.append(self.oval(x-17*s,y-10*s,34*s,26*s,"#5d9852","#253c29"));out.append(self.circle(x,y-16*s,11*s,"#75a95d"));out.append(self.polygon([x-7*s,y-22*s,x-17*s,y-32*s,x-11*s,y-15*s],"#54854b"));out.append(self.polygon([x+7*s,y-22*s,x+17*s,y-32*s,x+11*s,y-15*s],"#54854b"));out.append(self.circle(x-4*s,y-17*s,1.5*s,"#2d211b"));out.append(self.circle(x+4*s,y-17*s,1.5*s,"#2d211b"))
 
+    def draw_tree(self,out,x,y,scale=1.0):
+        s=scale
+        out.append(self.oval(x-24*s,y+13*s,48*s,11*s,"#14291f99"))
+        out.append(self.rect(x-6*s,y+1*s,12*s,26*s,"#57402d","#3b3028"))
+        out.append(self.rect(x-2*s,y+4*s,4*s,20*s,"#755137"))
+        out.append(self.oval(x-29*s,y-17*s,58*s,48*s,"#183329","#213b2c"))
+        out.append(self.circle(x-9*s,y-17*s,18*s,"#315c38"))
+        out.append(self.circle(x+11*s,y-12*s,15*s,"#244934"))
+        out.append(self.circle(x-14*s,y-26*s,8*s,"#527448"))
+        out.append(self.circle(x+2*s,y-29*s,7*s,"#42683f"))
+
+    def draw_ground_detail(self,out,x,y,ix,iy):
+        seed=(ix*92837111+iy*689287499+0x9E3779B9)&0xFFFFFFFF
+        for mark in range(2):
+            seed=(1664525*seed+1013904223)&0xFFFFFFFF
+            px=x+9+(seed&63);py=y+9+((seed>>8)&63)
+            if self.area=="숲":
+                if seed%4==0:
+                    out.append(self.oval(px-4,py-2,9,4,"#40583a"))
+                    out.append(self.line(px-2,py+2,px-5,py+6,"#66834b",1))
+                else:
+                    out.append(self.circle(px,py,1.5,"#61774a" if seed%3 else "#91a365"))
+            elif self.area=="마을":
+                shade="#9a8563" if seed%2 else "#675a43"
+                out.append(self.polygon([px-4,py,px-1,py-2,px+4,py-1,px+3,py+2,px-2,py+3],shade))
+            elif self.area in ("교회 밖","왕실 상점가","왕국 안","왕국 기사단"):
+                shade="#858078" if self.area=="교회 밖" else "#a08c6d"
+                out.append(self.oval(px-2,py-1,5,3,shade))
+            else:
+                out.append(self.line(px-3,py,px+3,py,"#93807866",1))
+
     def draw_area_map(self,out):
         x0,y0,w,h=105,90,750,430
         left,top,plot_w,plot_h=132,145,696,315
@@ -1161,18 +1192,57 @@ class Game:
                 ix,iy=int(wx//80),int(wy//80)
                 shade=(ix*7+iy*11)%3
                 out.append(self.rect(sx(wx),sy(wy),81,81,FLOOR_PALETTES[self.area][shade]))
+                self.draw_ground_detail(out,sx(wx),sy(wy),ix,iy)
                 if self.area=="숲":
                     if (ix*13+iy*7)%4==0:
-                        tx,ty=sx(wx+40),sy(wy+38);out.append(self.rect(tx-5,ty+3,10,22,"#553f2d"));out.append(self.circle(tx,ty,23,"#1c382c"));out.append(self.circle(tx-5,ty-5,15,"#426d42"))
+                        self.draw_tree(out,sx(wx+40),sy(wy+38),.86)
         # Distinct landmarks by zone
         if self.area=="숲":
             out.append(self.rect(sx(140),sy(730),2100,76,"#8a7651"))
+            out.append(self.rect(sx(140),sy(730),2100,4,"#b49a68"))
             out.append(self.rect(sx(1390),sy(430),65,650,"#81704e"))
+            out.append(self.rect(sx(1390),sy(430),65,4,"#b49a68"))
             for x,y in [(360,390),(760,1160),(1250,300),(1710,1270),(2060,550),(1900,1050)]:
-                out.append(self.rect(sx(x)-6,sy(y)+8,12,30,"#51402e"));out.append(self.circle(sx(x),sy(y),32,"#183329"));out.append(self.circle(sx(x)-8,sy(y)-8,22,"#3b6840"))
+                self.draw_tree(out,sx(x),sy(y),1.12)
         elif self.area=="마을":
-            for x,y,c in [(240,230,"#8b6646"),(550,215,"#725a6d"),(970,235,"#775f4b"),(1090,700,"#705341"),(350,720,"#806349")]:
-                X,Y=sx(x),sy(y);out.append(self.rect(X-60,Y-18,120,82,c));out.append(self.rect(X-17,Y+20,34,45,"#342b31"));out.append(self.polygon([X-68,Y-18,X,Y-72,X+68,Y-18],"#b76f51"))
+            # The village's stone roads connect its three exits and meet at the common square.
+            out.append(self.rect(sx(0),sy(456),1400,90,"#5c4c3b"))
+            out.append(self.rect(sx(0),sy(463),1400,76,"#927b58"))
+            out.append(self.rect(sx(646),sy(0),108,500,"#5c4c3b"))
+            out.append(self.rect(sx(653),sy(0),94,500,"#927b58"))
+            for px in range(18,1400,72):
+                X=sx(px);Y=sy(479+(px//72%2)*23)
+                out.append(self.polygon([X-15,Y,X-10,Y-5,X+11,Y-4,X+15,Y+2,X+8,Y+6,X-13,Y+5],"#ac966d","#83704f"))
+            for py in range(18,500,68):
+                X=sx(672+(py//68%2)*25);Y=sy(py)
+                out.append(self.polygon([X,Y-14,X+5,Y-9,X+5,Y+10,X-2,Y+14,X-6,Y+7,X-5,Y-10],"#ac966d","#83704f"))
+            # A working stone well gives the village square a recognizable center.
+            wx,wy=sx(790),sy(635)
+            out.append(self.oval(wx-38,wy+17,76,15,"#382f2788"))
+            out.append(self.circle(wx,wy,26,"#76674f","#c1aa7a"))
+            out.append(self.circle(wx,wy-2,18,"#263c45","#4d4a3c"))
+            out.append(self.circle(wx-5,wy-7,5,"#668d91"))
+            out.append(self.rect(wx+19,wy-20,5,24,"#785a38"))
+            houses=[
+                (240,230,"#8b6646","#a74e42"),(550,215,"#725a6d","#554761"),
+                (970,235,"#775f4b","#8a6548"),(1090,700,"#705341","#6d4d42"),
+                (350,720,"#806349","#9a6746"),
+            ]
+            for x,y,c,roof in houses:
+                X,Y=sx(x),sy(y)
+                out.append(self.oval(X-72,Y+51,144,22,"#29251f77"))
+                out.append(self.rect(X-60,Y-18,120,82,c,"#49392f"))
+                out.append(self.rect(X-56,Y-14,112,7,"#d2b778"))
+                out.append(self.rect(X+29,Y-56,15,34,"#59453b"))
+                out.append(self.polygon([X-68,Y-18,X,Y-72,X+68,Y-18],roof,"#4d332e"))
+                out.append(self.line(X-58,Y-22,X,Y-67,"#d08a60",2))
+                for window_x in (X-42,X+22):
+                    out.append(self.rect(window_x,Y+1,20,21,"#344c55","#d8c18a"))
+                    out.append(self.line(window_x+10,Y+2,window_x+10,Y+20,"#b7a77e",1))
+                    out.append(self.line(window_x+1,Y+11,window_x+19,Y+11,"#b7a77e",1))
+                out.append(self.rect(X-17,Y+20,34,44,"#342b31","#c3a879"))
+                out.append(self.circle(X+10,Y+43,2,"#e2c47f"))
+                out.append(self.rect(X-24,Y+61,48,5,"#b59a70"))
         elif self.area=="교회 밖":
             X,Y=sx(600),sy(300);out.append(self.rect(X-170,Y-45,340,150,"#85858a"));out.append(self.polygon([X-195,Y-45,X,Y-155,X+195,Y-45],"#777b87"));out.append(self.rect(X-50,Y-220,100,180,"#a19b8d"));out.append(self.polygon([X-60,Y-220,X,Y-290,X+60,Y-220],"#72798b"));out.append(self.rect(sx(130),sy(630),180,95,"#6e624e"))
         elif self.area=="교회 안":
