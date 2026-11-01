@@ -598,6 +598,39 @@ class GameRegressionTests(unittest.TestCase):
         g.battle_action("skill")
         self.assertLess(g.enemies[0]["hp"], 90)
 
+    def test_skill_without_enough_mana_keeps_attack_menu_open_without_losing_turn(self):
+        g=self.new_game()
+        g.player.update(job="전사",mp=0,hp=80)
+        g.enemies=[{"name":"늑대","x":400,"y":300,"hp":90,"maxhp":90,
+                    "atk":12,"level":1,"alive":True}]
+        g.start_battle(0)
+        g.battle_action("attack")
+        enemy_hp=g.enemies[0]["hp"]
+        player_hp=g.player["hp"]
+        g.battle_action("skill")
+        self.assertEqual(g.battle["submenu"],"attack")
+        self.assertEqual(g.enemies[0]["hp"],enemy_hp)
+        self.assertEqual(g.player["hp"],player_hp)
+        self.assertIn("MP 부족",g.battle["log"])
+
+    def test_attack_lunge_changes_position_over_the_effect_animation(self):
+        g=self.new_game()
+        g.enemies=[{"name":"늑대","x":400,"y":300,"hp":90,"maxhp":90,
+                    "atk":1,"level":1,"alive":True}]
+        g.start_battle(0)
+        g.battle_action("basic")
+        g.battle["effect_t"]=.42
+        g.draw()
+        start=[item for item in json.loads(frames[-1])
+               if item.get("t")=="t" and item.get("s")==g.player["name"] and item.get("y",0)>370]
+        self.assertEqual(len(start),1)
+        g.battle["effect_t"]=.21
+        g.draw()
+        impact=[item for item in json.loads(frames[-1])
+                if item.get("t")=="t" and item.get("s")==g.player["name"] and item.get("y",0)>370]
+        self.assertEqual(len(impact),1)
+        self.assertGreater(impact[0]["x"],start[0]["x"])
+
     def test_combat_skill_name_and_cost_follow_the_job(self):
         g=self.new_game()
         self.assertEqual(g.skill_profile(),{"name":"강타","cost":7,"multiplier":2.0,"effect":"strike"})

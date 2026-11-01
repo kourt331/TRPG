@@ -881,7 +881,10 @@ class Game:
             b["effect"]="slash";b["effect_t"]=.42;b["submenu"]=None
         elif action=="skill":
             skill=self.skill_profile();cost=skill["cost"]
-            if p["mp"]<cost:b["log"]=f"{skill['name']} 사용에 MP {cost}가 필요하다."
+            if p["mp"]<cost:
+                b["log"]=f"MP 부족: {skill['name']} 사용에는 {cost}가 필요하다. 다른 공격을 선택해."
+                b["submenu"]="attack"
+                return
             else:
                 p["mp"]-=cost
                 dmg=max(2,round(p["atk"]*skill["multiplier"])+random.randint(-2,4))
@@ -1296,16 +1299,36 @@ class Game:
             out.append(self.text(245,150,p["name"],17,"#f5ecd9","center"));out.append(self.text(705,150,e["name"],17,"#f5ecd9","center"))
             out.append(self.rect(145,170,200,13,"#351f25"));out.append(self.rect(145,170,200*max(0,p["hp"])/p["maxhp"],13,"#76ae77"));out.append(self.text(245,194,f"HP {p['hp']}/{p['maxhp']} · MP {p['mp']}/{p['maxmp']}",12,"#e7e3da","center"))
             out.append(self.rect(605,170,200,13,"#351f25"));out.append(self.rect(605,170,200*max(0,e["hp"])/e["maxhp"],13,"#c8564d"));out.append(self.text(705,194,f"HP {max(0,e['hp'])}/{e['maxhp']} · Lv.{e['level']}",12,"#e7e3da","center"))
-            self.draw_character(out,285,325,p["name"],p["job"],p["race"],p["faction"],1.85,p.get("weapon"),p.get("armor"))
-            if e.get("human"):self.draw_character(out,675,325,e["name"],"기사" if "기사" in e["name"] else "상인","인간","왕실",1.65)
-            else:self.draw_monster(out,675,325,e["name"],1.65)
+            effect=b.get("effect");effect_t=max(0,b.get("effect_t",0))
+            effect_duration=.55 if b.get("won") else {"slash":.42,"skill":.5,"shield":.4,"miss":.25}.get(effect,.4)
+            progress=max(0,min(1,1-effect_t/effect_duration))
+            impact=math.sin(progress*math.pi)
+            lunge=30*impact if effect in ("slash","skill") else 0
+            player_x=285+lunge
+            enemy_x=675-18*math.sin(max(0,min(1,1-b.get("counter_t",0)/.35))*math.pi) if b.get("counter_t",0)>0 else 675
+            self.draw_character(out,player_x,325,p["name"],p["job"],p["race"],p["faction"],1.85,p.get("weapon"),p.get("armor"))
+            if e.get("human"):self.draw_character(out,enemy_x,325,e["name"],"기사" if "기사" in e["name"] else "상인","인간","왕실",1.65)
+            else:self.draw_monster(out,enemy_x,325,e["name"],1.65)
             if b.get("effect_t",0)>0:
-                if b.get("effect")=="slash":out.append(self.line(360,300,590,350,"#fff1c1",13));out.append(self.line(385,285,600,335,"#e9aa55",4))
-                elif b.get("effect")=="skill":
-                    for i in range(6):out.append(self.circle(515+(i%3)*25,280+(i//3)*60,8,"#ffd56f"))
-                    out.append(self.line(360,300,590,350,"#ffe7a2",20))
-                elif b.get("effect")=="shield":out.append(self.circle(285,310,61,"#78c7d566","#a4e6e6"))
-            if b.get("counter_t",0)>0:out.append(self.line(630,315,365,340,"#e85d50",11))
+                if effect=="slash":
+                    offset=progress*72
+                    out.append(self.circle(enemy_x-16,325,12+22*impact,"#ffe4a455"))
+                    out.append(self.line(350+offset,300,555+offset,350,"#fff1c1",13))
+                    out.append(self.line(375+offset,285,565+offset,335,"#e9aa55",4))
+                elif effect=="skill":
+                    out.append(self.circle(enemy_x-12,322,18+24*impact,"#f6cf7555","#ffe7a2"))
+                    for i in range(8):
+                        angle=i*math.tau/8
+                        radius=12+progress*42
+                        px=enemy_x+math.cos(angle)*radius
+                        py=320+math.sin(angle)*radius*.72
+                        out.append(self.circle(px,py,3+2*impact,"#ffd56f"))
+                    out.append(self.line(player_x+75,300,enemy_x-35,335,"#ffe7a2",7+10*impact))
+                elif effect=="shield":out.append(self.circle(player_x,310,53+8*impact,"#78c7d566","#a4e6e6"))
+                elif effect=="miss":out.append(self.text(player_x,260-progress*26,"빗나감",15,"#e3b6a2","center"))
+            if b.get("counter_t",0)>0:
+                counter_progress=max(0,min(1,1-b["counter_t"]/.35));counter_x=630-counter_progress*125
+                out.append(self.line(counter_x,315,counter_x-135,340,"#e85d50",11))
             out.append(self.text(480,410,b["log"],15,"#fff5df","center"))
             if b.get("submenu")=="attack":
                 skill=self.skill_profile()
