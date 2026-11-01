@@ -778,6 +778,25 @@ class GameRegressionTests(unittest.TestCase):
         self.assertEqual(p["bandages"], 1)
         self.assertEqual(g.enemies[0]["hp"], 90)
 
+    def test_bandage_reports_only_the_hp_actually_restored_in_every_context(self):
+        for context in ("field", "inventory", "battle"):
+            with self.subTest(context=context):
+                g=self.new_game()
+                g.player.update(hp=99,maxhp=100,bandages=1)
+                if context=="field":
+                    g.tick(.01,"[]",'["h"]',"null")
+                elif context=="inventory":
+                    g.open_inventory();g.choose(0)
+                else:
+                    g.enemies=[{"name":"늑대","x":400,"y":300,"hp":90,"maxhp":90,
+                                "atk":30,"level":1,"alive":True}]
+                    g.start_battle(0);g.battle_action("item")
+                self.assertEqual(g.player["hp"],100)
+                self.assertEqual(g.player["bandages"],0)
+                message=g.battle["log"] if context=="battle" else g.notice
+                self.assertIn("HP 1 회복",message)
+                if context=="battle":self.assertEqual(g.enemies[0]["hp"],90)
+
     def test_forest_walk_triggers_an_immediate_ambush(self):
         g = self.new_game()
         g.area = "숲"
