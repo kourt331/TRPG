@@ -15,7 +15,7 @@ python3 -m http.server 8000
 
 ## GitHub Pages
 
-게임은 [왕실과 교회의 전쟁 · 제1장](https://kourt331.github.io/ganggang/kingdom-church-rpg/)에서 실행합니다. 저장소의 기존 Pages 설정은 `main` 브랜치 루트를 게시하므로, 이 폴더의 변경도 `main`에 반영되면 `/kingdom-church-rpg/` 경로에 게시됩니다.
+게임은 [왕실과 교회의 전쟁 · 제1장](https://kourt331.github.io/TRPG/)에서 실행합니다. 전용 `TRPG` 저장소의 `main` 브랜치 루트에 `index.html`과 `game.py`가 있으며, 변경을 `main`에 반영하면 GitHub Pages에 자동 배포됩니다. 기존에 사용 중인 `ganggang` 저장소와는 별도로 관리합니다.
 
 ## 조작
 
