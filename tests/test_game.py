@@ -938,6 +938,14 @@ class GameRegressionTests(unittest.TestCase):
         self.assertIn("window.addEventListener('blur',()=>{held.clear();presses.length=0;click=null})",html)
         self.assertIn("addEventListener('click',e=>{e.preventDefault();presses.push(b.dataset.press)})",html)
 
+    def test_web_shell_offers_retry_after_a_runtime_load_error(self):
+        html=(ROOT/"index.html").read_text(encoding="utf-8")
+        self.assertIn('<section id="error" role="alert" aria-live="assertive">',html)
+        self.assertIn('<button id="retry" type="button">다시 시도</button>',html)
+        self.assertIn("function showError(e){err.style.display='grid';",html)
+        self.assertIn("errorText.textContent=String(e)",html)
+        self.assertIn("retry.addEventListener('click',()=>window.location.reload())",html)
+
     def test_title_screen_uses_a_local_optimized_chapter_illustration(self):
         html=(ROOT/"index.html").read_text(encoding="utf-8")
         artwork=ROOT/"assets/chapter1-title.jpg"
