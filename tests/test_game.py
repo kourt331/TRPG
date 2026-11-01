@@ -415,11 +415,26 @@ class GameRegressionTests(unittest.TestCase):
         g.move_area("마을")
         self.assertEqual(g.area, "마을")
         self.assertEqual(p["faction"], "방랑자")
+        self.assertEqual(p["visited_faction"], "숲")
         self.assertFalse(p["prayer_due"])
         g.move_area("숲")
         self.assertEqual(g.area, "숲")
         g.move_area("교회 밖")
         self.assertEqual(g.area, "숲")
+
+    def test_death_after_church_exile_returns_to_wanderer_forest(self):
+        g = self.new_game()
+        p = g.player
+        p.update(faction="교회", area="교회 안", prayer_due=True, hp=1, gold=101)
+        g.area = "교회 안"
+        g.exile_church()
+        g.enemies = [{"name":"늑대","x":400,"y":300,"hp":90,"maxhp":90,
+                      "atk":40,"level":1,"alive":True}]
+        g.start_battle(0)
+        g.enemy_turn()
+        self.assertEqual(g.area, "숲")
+        self.assertEqual(p["visited_faction"], "숲")
+        self.assertEqual(p["gold"], 50)
 
     def test_active_quest_cannot_be_overwritten(self):
         g = self.new_game()
@@ -1087,9 +1102,12 @@ class GameRegressionTests(unittest.TestCase):
             g.move_area(area)
             self.assertEqual(g.area, area)
 
-    def test_death_returns_to_last_area_and_halves_gold(self):
+    def test_neutral_village_does_not_replace_last_faction_respawn(self):
         g = self.new_game()
-        g.player.update(hp=1, maxhp=100, gold=101, visited_faction="교회 안")
+        g.player.update(hp=1, maxhp=100, gold=101, faction="교회", area="교회 안", visited_faction="교회 안")
+        g.area = "교회 안"
+        g.move_area("마을")
+        self.assertEqual(g.player["visited_faction"], "교회 안")
         g.enemies = [{"name":"늑대","x":400,"y":300,"hp":90,"maxhp":90,
                       "atk":40,"level":1,"alive":True}]
         g.start_battle(0)
