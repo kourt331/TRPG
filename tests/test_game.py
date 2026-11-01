@@ -953,6 +953,13 @@ class GameRegressionTests(unittest.TestCase):
         self.assertTrue(artwork.is_file())
         self.assertLess(artwork.stat().st_size,750_000)
 
+    def test_mobile_title_screen_is_not_clipped_by_the_game_canvas(self):
+        html=(ROOT/"index.html").read_text(encoding="utf-8")
+        self.assertIn("@media(max-width:600px){#setup{position:fixed;z-index:20;inset:0;",html)
+        self.assertIn("overflow-y:auto;overscroll-behavior:contain",html)
+        self.assertIn("align-content:safe center",html)
+        self.assertIn("height:100dvh",html)
+
     def test_area_map_pauses_movement_and_escape_closes_it(self):
         g = self.new_game()
         p = g.player
