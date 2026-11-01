@@ -80,7 +80,7 @@ class GameRegressionTests(unittest.TestCase):
     def test_save_and_resume_preserve_player_area_quest_and_battle(self):
         g = self.new_game()
         g.area = "숲"
-        g.player.update(area="숲", x=1234, y=765, gold=137,
+        g.player.update(area="숲", x=1234, y=765, gold=137, facing="left",
                         quest={"title":"숲의 마물 퇴치","source":"church","goal":1,"count":0})
         g.enemies = [{"name":"늑대","x":1200,"y":740,"hp":20,"maxhp":40,
                       "atk":6,"level":1,"alive":True}]
@@ -89,10 +89,47 @@ class GameRegressionTests(unittest.TestCase):
         restored = game.Game()
         self.assertTrue(restored.load_snapshot(g.save_snapshot()))
         self.assertEqual(restored.player["gold"], 137)
+        self.assertEqual(restored.player["facing"], "left")
         self.assertEqual(restored.area, "숲")
         self.assertEqual(restored.player["quest"]["title"], "숲의 마물 퇴치")
         self.assertEqual(restored.mode, "battle")
         self.assertEqual(restored.battle["submenu"], "attack")
+
+    def test_legacy_save_defaults_facing_and_rejects_unknown_direction(self):
+        source=self.new_game()
+        snapshot=json.loads(source.save_snapshot())
+        snapshot["player"].pop("facing")
+        restored=game.Game()
+        self.assertTrue(restored.load_snapshot(json.dumps(snapshot)))
+        self.assertEqual(restored.player["facing"],"down")
+        snapshot["player"]["facing"]="diagonal"
+        self.assertFalse(game.Game().load_snapshot(json.dumps(snapshot)))
+
+    def test_player_turns_toward_movement_and_keeps_direction_after_resume(self):
+        g=self.new_game()
+        g.area="마을"
+        g.player.update(area="마을",x=700,y=500,facing="down")
+        g.tick(.05,json.dumps(["ArrowLeft"]),"[]","null")
+        self.assertLess(g.player["x"],700)
+        self.assertEqual(g.player["facing"],"left")
+        self.assertTrue(g.player_walking)
+        resumed=game.Game()
+        self.assertTrue(resumed.load_snapshot(g.save_snapshot()))
+        self.assertEqual(resumed.player["facing"],"left")
+        self.assertFalse(resumed.player_walking)
+
+    def test_character_faces_forward_profile_and_back_and_animates_footsteps(self):
+        g=self.new_game()
+        down=[];g.draw_character(down,100,100,"영웅",facing="down",phase=0)
+        left=[];g.draw_character(left,100,100,"영웅",facing="left",walking=True,phase=1.57)
+        up=[];g.draw_character(up,100,100,"영웅",facing="up",phase=0)
+        eyes=lambda scene:[item for item in scene if item.get("t")=="c" and item.get("r")==1.3]
+        self.assertEqual(len(eyes(down)),2)
+        self.assertEqual(len(eyes(left)),1)
+        self.assertEqual(len(eyes(up)),0)
+        boots=lambda scene:[(item["x"],item["y"]) for item in scene
+                            if item.get("t")=="r" and item.get("c")=="#342b2a"]
+        self.assertNotEqual(boots(down),boots(left))
 
     def test_corrupt_save_is_rejected_without_starting_game(self):
         g = game.Game()

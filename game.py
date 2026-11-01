@@ -66,6 +66,8 @@ class Game:
         self.encounter_meter = 0
         self.tick_n = 0
         self.save_elapsed = 0
+        self.player_walking = False
+        self.walk_phase = 0.0
 
     def start(self, name):
         race = random.choice(["인간", "수인"])
@@ -77,7 +79,7 @@ class Game:
         mw,mh=MAP_SIZE[area]
         self.player = {
             "name": (name or "이름 없는 여행자")[:14], "race":race, "gender":gender,"religion":religion,
-            "area":area,"faction":faction,"job":"미정","x":mw//2,"y":mh//2,
+            "area":area,"faction":faction,"job":"미정","x":mw//2,"y":mh//2,"facing":"down",
             "hp":100,"maxhp":100,"mp":30,"maxmp":30,"level":1,"xp":0,
             "gold":80,"bandages":1,"weapon":"낡은 검","armor":"여행자 옷",
             "atk":10,"def":3,"quest":None,"quest_kills":0,"priest_refusals":0,
@@ -89,6 +91,7 @@ class Game:
         self.player["visited_faction"]=area
         self.area=area; self.enemies=[]; self.wanderers=[]; self.dialog=None; self.map_open=False; self.started=True
         self.mode="world";self.walk_meter=0;self.encounter_meter=0
+        self.player_walking=False;self.walk_phase=0.0
         self.notice = self.intro_text(); self.notice_t=9
         self.spawn_enemies()
         self.draw()
@@ -128,6 +131,8 @@ class Game:
             if any(not isinstance(p[key],str) or not p[key] for key in text_fields):return False
             mapw,maph=MAP_SIZE[area]
             if not (0<=p["x"]<=mapw and 0<=p["y"]<=maph):return False
+            p.setdefault("facing","down")
+            if p["facing"] not in ("up","down","left","right"):return False
             p.setdefault("religion",{"숲":"숲의 신앙","교회 밖":"교회 신앙","교회 안":"교회 신앙",
                                       "왕실 상점가":"왕실 신앙","왕국 기사단":"왕실 신앙","왕국 안":"왕실 신앙","왕의 방":"왕실 신앙"}.get(area,"숲의 신앙"))
             p.setdefault("owned_weapons",[p.get("weapon","낡은 검")]);p.setdefault("owned_armor",[p.get("armor","여행자 옷")])
@@ -189,6 +194,7 @@ class Game:
             tick_n=data.get("tick_n",0)
             if isinstance(tick_n,bool) or not isinstance(tick_n,int) or tick_n<0:return False
             self.player=p;self.area=area;self.enemies=enemies;self.wanderers=wanderers
+            self.player_walking=False;self.walk_phase=0.0
             self.walk_meter=progress["walk_meter"];self.encounter_meter=progress["encounter_meter"]
             self.mode=mode
             self.dialog=dialog;self.notice=str(data.get("notice",""));self.notice_t=progress["notice_t"]
@@ -980,6 +986,7 @@ class Game:
         if not isinstance(click,(list,tuple)) or len(click)<2 or any(isinstance(v,bool) or not isinstance(v,(int,float)) or not math.isfinite(v) for v in click[:2]):click=None
         elif click is not None:click=(float(click[0]),float(click[1]))
         if not self.started:return
+        self.player_walking=False
         self.save_elapsed+=max(0,float(dt))
         if self.save_elapsed>=1.5:
             self.save_elapsed=0;self.persist()
@@ -1031,13 +1038,19 @@ class Game:
         if any(k in held for k in ("ArrowUp","w","W")):dy-=speed
         if any(k in held for k in ("ArrowDown","s","S")):dy+=speed
         if dx and dy:dx*=.707;dy*=.707
+        if dx or dy:
+            if abs(dx)>=abs(dy):p["facing"]="right" if dx>0 else "left"
+            else:p["facing"]="down" if dy>0 else "up"
         mapw,maph=MAP_SIZE[self.area]
         old_x,old_y=p["x"],p["y"]
         next_x=max(32,min(mapw-32,old_x+dx))
         next_y=max(80,min(maph-32,old_y+dy))
         if not self.collides(next_x,old_y):p["x"]=next_x
         if not self.collides(p["x"],next_y):p["y"]=next_y
-        self.update_world_ai(dt,math.hypot(p["x"]-old_x,p["y"]-old_y))
+        moved_distance=math.hypot(p["x"]-old_x,p["y"]-old_y)
+        self.player_walking=moved_distance>0
+        if moved_distance:self.walk_phase=(self.walk_phase+moved_distance*.04)%math.tau
+        self.update_world_ai(dt,moved_distance)
         if self.mode=="battle":self.draw();return
         for k in presses:
             if k in ("e","E","Enter"):self.interact()
@@ -1058,8 +1071,14 @@ class Game:
     def polygon(self,points,fill,outline=None):return {"t":"p","pts":points,"c":fill,"o":outline}
     def text(self,x,y,s,size=16,color="#f6eddb",align="left"):return {"t":"t","x":x,"y":y,"s":str(s),"size":size,"c":color,"a":align}
 
-    def draw_character(self,out,x,y,name,job="주민",race="인간",faction="마을",scale=1.0,weapon=None,armor=None):
+    def draw_character(self,out,x,y,name,job="주민",race="인간",faction="마을",scale=1.0,weapon=None,armor=None,
+                       facing="down",walking=False,phase=None):
         s=scale
+        facing=facing if facing in ("up","down","left","right") else "down"
+        if phase is None:phase=self.tick_n*.075+(x+y)*.001
+        bob=(abs(math.sin(phase))*1.6 if walking else math.sin(phase)*.8)*s
+        ground_y=y;y-=bob
+        step=math.sin(phase)*3.2*s if walking else 0
         palettes={"교회":("#d8d8cd","#566782","#cfb66d"),"왕실":("#9a4e47","#ddd2b6","#d9b96d"),"방랑자":("#594a3c","#292b31","#a9784f"),"마을":("#6d7651","#9b7558","#d1b27c")}
         coat,trim,metal=palettes.get(faction,palettes["마을"])
         if job in ("성직자","교황","성인"):coat,trim,metal="#e1ddcd","#536183","#e7cf84"
@@ -1069,27 +1088,49 @@ class Game:
         if armor in armor_colors:coat,trim,metal=armor_colors[armor]
         skin="#dfb999" if race=="인간" else "#d5a982"
         hair="#382b2a" if race=="인간" else "#593d35"
-        # ground shadow, boots, cloak, tunic, arms, head and hair
-        out.append(self.oval(x-15*s,y+10*s,30*s,8*s,"#10171288"))
-        out.append(self.rect(x-9*s,y+6*s,6*s,9*s,"#342b2a"));out.append(self.rect(x+3*s,y+6*s,6*s,9*s,"#342b2a"))
+        vertical=facing in ("up","down")
+        left_dx=0 if vertical else step
+        right_dx=0 if vertical else -step
+        left_dy=step if vertical else 0
+        right_dy=-step if vertical else 0
+        arm_sway=step*.55
+        out.append(self.oval(x-15*s,ground_y+10*s,30*s,8*s,"#10171288"))
+        out.append(self.rect(x-9*s+left_dx,y+6*s+left_dy,6*s,9*s,"#342b2a"))
+        out.append(self.rect(x+3*s+right_dx,y+6*s+right_dy,6*s,9*s,"#342b2a"))
         out.append(self.polygon([x-9*s,y-7*s,x+9*s,y-7*s,x+13*s,y+8*s,x+8*s,y+14*s,x-8*s,y+14*s,x-13*s,y+8*s],coat,"#24252a"))
         out.append(self.rect(x-7*s,y-2*s,14*s,13*s,trim))
-        out.append(self.rect(x-14*s,y-5*s,6*s,12*s,coat));out.append(self.rect(x+8*s,y-5*s,6*s,12*s,coat))
+        out.append(self.rect(x-14*s+left_dx*.35,y-5*s+left_dy*.35,6*s,12*s,coat))
+        out.append(self.rect(x+8*s+right_dx*.35,y-5*s+right_dy*.35,6*s,12*s,coat))
         out.append(self.circle(x,y-13*s,8*s,skin,"#473732"));out.append(self.oval(x-8*s,y-21*s,16*s,10*s,hair))
         if race=="수인":
-            out.append(self.polygon([x-6*s,y-18*s,x-13*s,y-29*s,x-1*s,y-22*s],hair));out.append(self.polygon([x+6*s,y-18*s,x+13*s,y-29*s,x+1*s,y-22*s],hair))
+            out.append(self.polygon([x-6*s,y-18*s,x-13*s,y-29*s,x-1*s,y-22*s],hair))
+            out.append(self.polygon([x+6*s,y-18*s,x+13*s,y-29*s,x+1*s,y-22*s],hair))
             out.append(self.line(x+10*s,y+4*s,x+17*s,y+12*s,hair,3*s))
         else:out.append(self.oval(x-7*s,y-20*s,14*s,7*s,hair))
-        out.append(self.circle(x-3*s,y-13*s,1.3*s,"#292323"));out.append(self.circle(x+3*s,y-13*s,1.3*s,"#292323"))
-        if job in ("성직자","교황","성인"):out.append(self.line(x,y-4*s,x,y+5*s,metal,2*s));out.append(self.line(x-3*s,y,x+3*s,y,metal,2*s))
+        if facing=="down":
+            out.append(self.circle(x-3*s,y-13*s,1.3*s,"#292323"));out.append(self.circle(x+3*s,y-13*s,1.3*s,"#292323"))
+        elif facing in ("left","right"):
+            eye_side=-1 if facing=="left" else 1
+            out.append(self.circle(x+eye_side*4*s,y-13*s,1.3*s,"#292323"))
+            out.append(self.circle(x+eye_side*7*s,y-11*s,1.2*s,"#9c6951"))
+        else:
+            out.append(self.oval(x-5*s,y-19*s,10*s,4*s,"#241f20"))
+        if job in ("성직자","교황","성인") and facing!="up":
+            out.append(self.line(x,y-4*s,x,y+5*s,metal,2*s));out.append(self.line(x-3*s,y,x+3*s,y,metal,2*s))
         if job in ("전사","기사","기사단장","도둑","도적","암살자"):
+            weapon_side=1 if facing in ("down","right") else -1
             if weapon=="사냥꾼 활":
-                out.append(self.line(x+13*s,y-12*s,x+21*s,y-6*s,"#895b38",3*s));out.append(self.line(x+21*s,y-6*s,x+21*s,y+5*s,"#b18452",3*s));out.append(self.line(x+21*s,y+5*s,x+13*s,y+11*s,"#895b38",3*s));out.append(self.line(x+13*s,y-12*s,x+13*s,y+11*s,"#ead8ad",1.3*s))
+                bow_x=x+weapon_side*13*s
+                out.append(self.line(bow_x,y-12*s,bow_x+weapon_side*8*s,y-6*s,"#895b38",3*s))
+                out.append(self.line(bow_x+weapon_side*8*s,y-6*s,bow_x+weapon_side*8*s,y+5*s,"#b18452",3*s))
+                out.append(self.line(bow_x+weapon_side*8*s,y+5*s,bow_x,y+11*s,"#895b38",3*s))
+                out.append(self.line(bow_x,y-12*s,bow_x,y+11*s,"#ead8ad",1.3*s))
             else:
                 length=24 if weapon in ("철검","늑대 송곳니검") else 22 if weapon=="고블린 단검" else 20
-                out.append(self.line(x+13*s,y+4*s,x+(13+length*.35)*s,y-length*.8*s,metal,2.4*s));out.append(self.line(x+10*s,y+6*s,x+16*s,y+9*s,"#49352b",3*s))
+                out.append(self.line(x+weapon_side*13*s,y+4*s,x+weapon_side*(13+length*.35)*s,y-length*.8*s,metal,2.4*s))
+                out.append(self.line(x+weapon_side*10*s,y+6*s,x+weapon_side*16*s,y+9*s,"#49352b",3*s))
         if job in ("왕","군주"):out.append(self.polygon([x-7*s,y-19*s,x-6*s,y-27*s,x-2*s,y-22*s,x+2*s,y-28*s,x+5*s,y-21*s,x+8*s,y-25*s,x+8*s,y-18*s],"#d2ad55"))
-        out.append(self.text(x,y+27*s,name,11*s,"#fff3d9","center"))
+        out.append(self.text(x,ground_y+27*s,name,11*s,"#fff3d9","center"))
 
     def draw_monster(self,out,x,y,name,scale=1.0):
         s=scale
@@ -1282,7 +1323,9 @@ class Game:
                 faction="교회" if kind in ("priest","trainer_church","altar","field","cleaning") else "왕실" if kind in ("trainer_kingdom","king","knight_hunters") else "방랑자" if kind in ("camp","wanderer_party") else "마을"
                 race="수인" if kind in ("villager","wanderer_party") and (int(x+y)//80)%3==0 else "인간"
                 self.draw_character(out,X,Y,name,role,race,faction,.86)
-        self.draw_character(out,sx(p["x"]),sy(p["y"]),p["name"],p["job"],p["race"],p["faction"],1.0,p.get("weapon"),p.get("armor"))
+        self.draw_character(out,sx(p["x"]),sy(p["y"]),p["name"],p["job"],p["race"],p["faction"],1.0,
+                            p.get("weapon"),p.get("armor"),facing=p.get("facing","down"),
+                            walking=self.player_walking,phase=self.walk_phase if self.player_walking else None)
         out.append(self.rect(0,0,W,67,"#111b24"));out.append(self.text(20,18,"왕실과 교회의 전쟁 · 제1장",18,"#f1d39a"));out.append(self.text(20,45,f"{p['name']} · {p['race']} · {p['gender']} · {p['religion']} · {p['faction']} / {p['job']}",12))
         next_level_xp=max(1,p["level"]*35);xp_ratio=max(0,min(1,p["xp"]/next_level_xp))
         out.append(self.text(690,20,f"HP {p['hp']}/{p['maxhp']}   MP {p['mp']}/{p['maxmp']}",14,"#e7e9dc"));out.append(self.text(690,45,f"Lv.{p['level']} XP {p['xp']}/{next_level_xp} · {p['gold']}G · 붕대 {p['bandages']}개",13,"#e7e9dc"))
@@ -1306,8 +1349,9 @@ class Game:
             lunge=30*impact if effect in ("slash","skill") else 0
             player_x=285+lunge
             enemy_x=675-18*math.sin(max(0,min(1,1-b.get("counter_t",0)/.35))*math.pi) if b.get("counter_t",0)>0 else 675
-            self.draw_character(out,player_x,325,p["name"],p["job"],p["race"],p["faction"],1.85,p.get("weapon"),p.get("armor"))
-            if e.get("human"):self.draw_character(out,enemy_x,325,e["name"],"기사" if "기사" in e["name"] else "상인","인간","왕실",1.65)
+            self.draw_character(out,player_x,325,p["name"],p["job"],p["race"],p["faction"],1.85,
+                                p.get("weapon"),p.get("armor"),facing="right")
+            if e.get("human"):self.draw_character(out,enemy_x,325,e["name"],"기사" if "기사" in e["name"] else "상인","인간","왕실",1.65,facing="left")
             else:self.draw_monster(out,enemy_x,325,e["name"],1.65)
             if b.get("effect_t",0)>0:
                 if effect=="slash":
