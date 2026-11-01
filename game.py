@@ -200,6 +200,7 @@ class Game:
             tick_n=data.get("tick_n",0)
             if isinstance(tick_n,bool) or not isinstance(tick_n,int) or tick_n<0:return False
             self.player=p;self.area=area;self.enemies=enemies;self.wanderers=wanderers
+            if self.area=="숲":self.repair_forest_actor_positions()
             self.player_walking=False;self.walk_phase=0.0
             self.walk_meter=progress["walk_meter"];self.encounter_meter=progress["encounter_meter"]
             self.mode=mode
@@ -238,10 +239,15 @@ class Game:
         self.wanderers=[]
         if self.area=="숲":
             names=["멧돼지","늑대","고블린"]
+            occupied=[]
             for i in range(7):
-                self.enemies.append({"name":random.choice(names),"x":random.randint(160,2200),"y":random.randint(130,1450),"hp":random.choice([26,34,42]),"maxhp":42,"atk":random.randint(5,9),"level":random.choice([1,1,2]),"alive":True,"vx":random.choice([-1,1])*random.randint(10,22),"vy":random.choice([-1,1])*random.randint(8,18),"turn":random.uniform(1,5)})
+                x,y=self.random_forest_position(occupied)
+                occupied.append((x,y))
+                self.enemies.append({"name":random.choice(names),"x":x,"y":y,"hp":random.choice([26,34,42]),"maxhp":42,"atk":random.randint(5,9),"level":random.choice([1,1,2]),"alive":True,"vx":random.choice([-1,1])*random.randint(10,22),"vy":random.choice([-1,1])*random.randint(8,18),"turn":random.uniform(1,5)})
             for _ in range(random.randint(3,5)):
-                self.wanderers.append({"x":random.randint(180,2200),"y":random.randint(150,1400),"vx":random.choice([-1,1])*random.randint(20,38),"vy":random.choice([-1,1])*random.randint(12,26),"turn":random.uniform(1,4),"size":random.randint(2,4)})
+                x,y=self.random_forest_position(occupied)
+                occupied.append((x,y))
+                self.wanderers.append({"x":x,"y":y,"vx":random.choice([-1,1])*random.randint(20,38),"vy":random.choice([-1,1])*random.randint(12,26),"turn":random.uniform(1,4),"size":random.randint(2,4)})
         elif self.area in ("왕실 상점가","왕국 기사단","왕국 안","왕의 방") and self.player.get("job") in ("도둑","도적"):
             self.enemies.append({"name":"왕실 경비","x":MAP_SIZE[self.area][0]//2,"y":MAP_SIZE[self.area][1]//2-90,"hp":52,"maxhp":52,"atk":11,"level":2,"alive":True,"human":True})
 
@@ -288,6 +294,38 @@ class Game:
                 doorway=cx-28<=x<=cx+28 and cy+18<=y<=cy+80
                 if inside and not doorway:return True
         return False
+
+    def random_forest_position(self, occupied=()):
+        p=self.player
+        for _ in range(240):
+            x=random.randint(160,2200);y=random.randint(130,1450)
+            if self.collides(x,y) or math.hypot(x-p["x"],y-p["y"])<160:continue
+            if any(math.hypot(x-ox,y-oy)<84 for ox,oy in occupied):continue
+            return x,y
+        for y in range(130,1451,40):
+            for x in range(160,2201,40):
+                if self.collides(x,y) or math.hypot(x-p["x"],y-p["y"])<160:continue
+                if any(math.hypot(x-ox,y-oy)<84 for ox,oy in occupied):continue
+                return x,y
+        return AREA_SPAWNS["숲"]
+
+    def repair_forest_actor_positions(self):
+        occupied=[]
+        actors=list(self.wanderers)+[e for e in self.enemies if e.get("alive") and not e.get("human")]
+        for actor in actors:
+            if self.collides(actor["x"],actor["y"]):
+                actor["x"],actor["y"]=self.random_forest_position(occupied)
+            occupied.append((actor["x"],actor["y"]))
+
+    def nearby_forest_position(self):
+        p=self.player
+        for radius in (42,54,66,78,90):
+            for step in range(16):
+                angle=math.tau*step/16
+                x=round(p["x"]+math.cos(angle)*radius)
+                y=round(p["y"]+math.sin(angle)*radius)
+                if 95<=x<=2300 and 100<=y<=1500 and not self.collides(x,y):return x,y
+        return self.random_forest_position()
 
     def move_forest_actor(self, actor, dt):
         old_x,old_y=actor["x"],actor["y"]
@@ -853,7 +891,8 @@ class Game:
 
     def start_ambush(self):
         name=random.choice(["멧돼지","늑대","고블린"])
-        enemy={"name":name,"x":self.player["x"]+45,"y":self.player["y"],"hp":random.choice([28,36,44]),"maxhp":44,"atk":random.randint(6,10),"level":random.choice([1,1,2]),"alive":True,"vx":0,"vy":0,"turn":random.uniform(1.2,3.5)}
+        x,y=self.nearby_forest_position()
+        enemy={"name":name,"x":x,"y":y,"hp":random.choice([28,36,44]),"maxhp":44,"atk":random.randint(6,10),"level":random.choice([1,1,2]),"alive":True,"vx":0,"vy":0,"turn":random.uniform(1.2,3.5)}
         self.enemies.append(enemy)
         self.say(f"숲의 {name}가 갑자기 습격했다!",3)
         self.start_battle(len(self.enemies)-1)
