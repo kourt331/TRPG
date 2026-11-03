@@ -276,12 +276,14 @@ class GameRegressionTests(unittest.TestCase):
         self.assertEqual(p["job"],"성직자")
         self.assertTrue(p["promoted"])
         self.assertEqual(g.dialog["title"],"직업 승급")
-        self.assertIn("chapter1:church:3",p["story_flags"])
-        self.assertIn("chapter1:church:7",p["story_flags"])
+        self.assertEqual(p["story_flags"],[])
+        self.assertEqual([(route,milestone) for route,milestone,_ in g.available_story_clues()],[("church",3),("church",7)])
+        self.assertIn("조사 가능: 숲 · 마물 굴 · 숲의 폐허",g.quest_journal_text())
         resumed=game.Game()
         self.assertTrue(resumed.load_snapshot(g.save_snapshot()))
         self.assertEqual(resumed.player["job"],"성직자")
         self.assertTrue(resumed.player["promoted"])
+        self.assertEqual(resumed.player["story_flags"],[])
 
     def test_three_church_refusals_lock_believer_promotion(self):
         g=self.new_game()
@@ -359,25 +361,60 @@ class GameRegressionTests(unittest.TestCase):
     def test_faction_story_clues_reveal_once_and_survive_resume(self):
         g = self.new_game()
         p=g.player
-        p.update(faction="교회",job="전사",church_quests_completed=0,prayer_due=False)
+        p.update(faction="교회",job="전사",church_quests_completed=0,prayer_due=False,area="교회 안")
+        g.area="교회 안"
         for _ in range(3):
             g.after_church_quest("church")
             if p["prayer_due"]:p["prayer_due"]=False
             if p["church_quests_completed"]<3:g.dialog=None
         self.assertEqual(g.dialog["title"],"기도 의무")
+        self.assertIn("M 지도의 주황색 조사 표식",g.dialog["text"])
+        self.assertNotIn("chapter1:church:3",p["story_flags"])
+        g.area="숲";p.update(area="숲",x=960,y=660);g.enemies=[];g.wanderers=[]
+        g.interact()
+        self.assertEqual(g.dialog["title"],"전쟁의 흔적")
         self.assertIn("왕실 문양이 찍힌 화살촉",g.dialog["text"])
         self.assertIn("chapter1:church:3",p["story_flags"])
         resumed=game.Game()
         self.assertTrue(resumed.load_snapshot(g.save_snapshot()))
         p=resumed.player
-        p.update(faction="왕실",job="전사",king_quests=0,prayer_due=False)
-        for _ in range(3):
-            resumed.after_church_quest("kingdom")
-            if p["king_quests"]<3:resumed.dialog=None
-        self.assertEqual(resumed.dialog["title"],"전쟁의 단서")
+        p.update(faction="왕실",job="전사",king_quests=3,prayer_due=False)
+        resumed.dialog=None
+        resumed.interact()
+        self.assertEqual(resumed.dialog["title"],"전쟁의 흔적")
         self.assertIn("교회 문양이 찍힌 약초 주머니",resumed.dialog["text"])
         self.assertIn("chapter1:royal:3",p["story_flags"])
         self.assertIsNone(resumed.reveal_story_beat("royal",3))
+
+    def test_story_site_requires_quest_milestone_and_reveals_only_eligible_route(self):
+        g=self.new_game();p=g.player
+        g.area="숲";g.enemies=[];g.wanderers=[]
+        p.update(area="숲",x=960,y=660,faction="교회",church_quests_completed=2,king_quests=0)
+        g.interact()
+        self.assertIn("3회 완료",g.notice)
+        self.assertEqual(p["story_flags"],[])
+        p["church_quests_completed"]=3
+        g.interact()
+        self.assertIn("chapter1:church:3",p["story_flags"])
+        self.assertNotIn("chapter1:royal:3",p["story_flags"])
+        self.assertIn("교회 기록:",g.dialog["text"])
+        p["king_quests"]=3
+        g.interact()
+        self.assertIn("chapter1:royal:3",p["story_flags"])
+        self.assertIn("왕실 기록:",g.dialog["text"])
+
+    def test_area_map_marks_available_story_sites_as_investigation_targets(self):
+        g=self.new_game();g.area="숲";g.enemies=[];g.wanderers=[]
+        g.player.update(area="숲",church_quests_completed=3,king_quests=0,quest=None)
+        out=[];g.draw_area_map(out)
+        labels=[item.get("s","") for item in out if item.get("t")=="t"]
+        self.assertIn("단서 조사: 마물 굴",labels)
+        self.assertNotIn("단서 조사: 숲의 폐허",labels)
+        self.assertTrue(any(item.get("t")=="c" and item.get("c")=="#f08a5b" for item in out))
+        g.player["church_quests_completed"]=7
+        out=[];g.draw_area_map(out)
+        labels=[item.get("s","") for item in out if item.get("t")=="t"]
+        self.assertIn("단서 조사: 숲의 폐허",labels)
 
     def test_ten_church_quests_and_prayers_finish_chapter_as_crusader(self):
         g = self.new_game()

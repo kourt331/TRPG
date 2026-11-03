@@ -45,6 +45,10 @@ CHAPTER_STORY_BEATS = {
         7:"폐허의 상자에는 양쪽 진영의 표식이 함께 찍혀 있었다. 왕은 보고서를 봉인하고 토벌을 계속하라 명한다.",
     },
 }
+STORY_CLUE_SITES = {
+    3: ("마물 굴", (960, 660), "cave"),
+    7: ("숲의 폐허", (1640, 1120), "ruins"),
+}
 JOB_SKILLS = {
     "전사":{"name":"회전 베기","cost":7,"multiplier":1.9,"effect":"strike"},
     "기사":{"name":"방패 강타","cost":6,"multiplier":1.7,"effect":"strike"},
@@ -255,6 +259,8 @@ class Game:
         data=[]
         if self.area=="숲":
             data=[("방랑자 야영지",240,210,"camp"),("마을로 가는 길",2310,800,"exit_village"),("숲길 표지판",120,780,"sign")]
+            for milestone,(name,(x,y),site_type) in STORY_CLUE_SITES.items():
+                data.append((name,x,y,"story_site",milestone,site_type))
             for i,g in enumerate(self.wanderers):data.append(("방랑자 집단",g["x"],g["y"],"wanderer_party",i))
         if self.area=="마을":
             data=[("상점",260,280,"shop"),("주민",700,300,"villager"),("여관",970,300,"inn"),("숲",55,500,"exit_forest"),("교회로",700,55,"exit_church"),("왕실 상점가",1350,500,"exit_kingdom")]
@@ -412,6 +418,11 @@ class Game:
         p=self.player
         if p.get("promoted"):return "제1장 완료"
         if p.get("prayer_due") and p.get("faction")=="교회":return "교회 안 제단에서 기도"
+        available=self.available_story_clues()
+        if available:
+            milestone=available[0][1]
+            site=STORY_CLUE_SITES[milestone][0]
+            return f"숲의 {site}에서 전쟁 단서 조사"
         if p.get("job")=="미정":
             first_steps={
                 "교회 밖":"교회 안 수련관에서 전사 또는 신자 직업 선택",
@@ -467,6 +478,11 @@ class Game:
         clue_lines=[f"전쟁 단서 {clues}/4"]
         if discovered:clue_lines.extend(discovered)
         else:clue_lines[0]+=" · 아직 발견하지 않음"
+        available=self.available_story_clues()
+        if available:
+            milestones=sorted({milestone for _,milestone,_ in available})
+            sites=" · ".join(STORY_CLUE_SITES[m][0] for m in milestones)
+            clue_lines.append(f"조사 가능: 숲 · {sites}")
         epilogue=self.chapter1_epilogue_text() if p.get("promoted") else None
         if epilogue:clue_lines.append(f"제1장 결말: {epilogue}")
         return "\n".join([
@@ -482,6 +498,40 @@ class Game:
         if key in flags:return None
         flags.append(key)
         return text
+
+    def available_story_clues(self, milestone=None):
+        p=self.player
+        progress={"church":p.get("church_quests_completed",0),"royal":p.get("king_quests",0)}
+        flags=set(p.get("story_flags",[]));available=[]
+        for route in ("church","royal"):
+            for threshold,text in sorted(CHAPTER_STORY_BEATS[route].items()):
+                if milestone is not None and threshold!=milestone:continue
+                if progress[route]>=threshold and f"chapter1:{route}:{threshold}" not in flags:
+                    available.append((route,threshold,text))
+        return available
+
+    def story_clue_hint(self, milestone):
+        if not self.available_story_clues(milestone):return None
+        site=STORY_CLUE_SITES[milestone][0]
+        return f"숲의 {site}에서 전쟁의 흔적을 조사할 수 있다. M 지도의 주황색 조사 표식을 확인하자."
+
+    def investigate_story_site(self, milestone):
+        p=self.player
+        available=self.available_story_clues(milestone)
+        if available:
+            records=[]
+            for route,_,_ in available:
+                beat=self.reveal_story_beat(route,milestone)
+                if beat:
+                    label="교회 기록" if route=="church" else "왕실 기록"
+                    records.append(f"{label}: {beat}")
+            self.open_dialog("전쟁의 흔적","\n".join(records),["기록하기"])
+            return
+        eligible_routes=[route for route,count in (("church",p.get("church_quests_completed",0)),("royal",p.get("king_quests",0))) if count>=milestone]
+        if eligible_routes:
+            self.say("이 장소에서 확인할 수 있는 진영 기록은 모두 이미 모았다.")
+        else:
+            self.say(f"아직 흔적을 해독할 수 없다. 교회 또는 왕실 의뢰를 {milestone}회 완료한 뒤 다시 조사하자.")
 
     def chapter1_epilogue_text(self):
         flags=set(self.player.get("story_flags",[]))
@@ -605,6 +655,7 @@ class Game:
         if kind in transitions:self.move_area(transitions[kind]);return
         if kind=="sign":self.say("숲은 넓다. 길을 잃지 않도록 동쪽 끝의 마을 길을 찾아가자.");return
         if kind=="enemy": self.start_battle(extra[0]);return
+        if kind=="story_site":self.investigate_story_site(extra[0]);return
         if kind=="wanderer_party":
             welcome="숲의 신앙을 가진 수인에게 무리가 반갑게 길을 내준다." if p["religion"]=="숲의 신앙" or p["race"]=="수인" else "숲의 방랑자들이 낯선 신앙을 살피며 조심스럽게 지켜본다."
             if p["faction"]=="방랑자":self.open_dialog("방랑자 집단",f"{welcome} 떠돌이 무리가 숲길을 따라 이동 중이다.",["함께 이동하기","나가기"])
@@ -717,19 +768,19 @@ class Game:
             p["church_quests_completed"]+=1
         if p["faction"]=="교회" and p["job"]=="전사" and source=="church":
             p["prayer_due"]=True
-            beat=self.reveal_story_beat("church",p["church_quests_completed"])
+            hint=self.story_clue_hint(p["church_quests_completed"])
             text="의뢰를 완료했다. 교회 안 제단에서 기도해야 한다.\n기도 없이 교회 진영을 떠나면 방랑자로 추방된다."
-            if beat:text+="\n전쟁 단서: "+beat
+            if hint:text+="\n"+hint
             self.open_dialog("기도 의무",text,["알겠어"])
         elif p["faction"]=="교회" and p["job"]=="신자" and source=="church_simple":
-            beat=self.reveal_story_beat("church",p["church_quests_completed"])
-            if beat:self.open_dialog("전쟁의 단서",beat,["계속"])
+            hint=self.story_clue_hint(p["church_quests_completed"])
+            if hint:self.open_dialog("흔적의 위치",hint,["계속"])
             if p["church_quests_completed"]>=10 and p["priest_refusals"]<3 and not p["promoted"]:
                 self.promote("성직자")
         if p["faction"]=="왕실" and p["job"] in ("전사","기사") and source=="kingdom":
             p["king_quests"]+=1
-            beat=self.reveal_story_beat("royal",p["king_quests"])
-            if beat:self.open_dialog("전쟁의 단서",beat,["계속"])
+            hint=self.story_clue_hint(p["king_quests"])
+            if hint:self.open_dialog("흔적의 위치",hint,["계속"])
             if p["king_quests"]>=10 and p["job"]=="전사":self.promote("기사")
 
     def complete_monster_quest(self):
@@ -1251,15 +1302,16 @@ class Game:
                 is_monster_target=monster_targets and not enemy.get("human")
                 if not is_monster_target:continue
             is_simple_target=kind==simple_target
+            is_story_target=kind=="story_site" and bool(self.available_story_clues(extra[0]))
             is_quest_target=is_monster_target or is_simple_target
             mx,my=point(x,y)
-            if is_quest_target:color="#f08a5b"
+            if is_quest_target or is_story_target:color="#f08a5b"
             elif kind in exit_kinds:color="#e5c16e"
             elif kind=="wanderer_party":color="#86c995"
             else:color="#80b6bf"
             out.append(self.circle(mx,my,5,color,"#17232c"))
             if kind not in ("wanderer_party",):
-                label=f"의뢰 대상: {name}" if is_monster_target else f"목표: {name}" if is_simple_target else name
+                label=f"의뢰 대상: {name}" if is_monster_target else f"목표: {name}" if is_simple_target else f"단서 조사: {name}" if is_story_target else name
                 label_left=left+8;label_right=left+plot_w-8;label_width=len(label)*10
                 label_x=mx+8;align="left"
                 if label_x+label_width>label_right:
@@ -1269,7 +1321,7 @@ class Game:
                 out.append(self.text(label_x,label_y,label,10,"#f3eee2",align))
         mx,my=point(self.player["x"],self.player["y"])
         out.append(self.circle(mx,my,7,"#e76c5e","#fff0d0"))
-        out.append(self.text(x0+24,y0+h-18,"금색: 출구   주황색: 의뢰 목표   청록색: 시설   초록색: 방랑자   붉은색: 나",12,"#d8d2c5"))
+        out.append(self.text(x0+24,y0+h-18,"금색: 출구   주황색: 의뢰/단서 목표   청록색: 시설   초록색: 방랑자   붉은색: 나",12,"#d8d2c5"))
         out.append(self.text(x0+w-20,y0+h-18,"M / Esc 닫기",12,"#e4c783","right"))
 
     def draw(self):
@@ -1365,6 +1417,19 @@ class Game:
             elif kind=="wanderer_party":
                 for j in range(extra[0]%3+2):self.draw_character(out,X+(j-(extra[0]%3+1)/2)*26,Y+8,"", "방랑자", "인간", "방랑자",.72)
                 out.append(self.text(X,Y+40,name,11,"#fff0d4","center"))
+            elif kind=="story_site":
+                site_type=extra[1]
+                out.append(self.oval(X-32,Y+12,64,14,"#15251faa"))
+                if site_type=="cave":
+                    out.append(self.polygon([X-30,Y+11,X-27,Y-6,X-16,Y-23,X,Y-29,X+18,Y-22,X+29,Y-5,X+31,Y+11],"#777365","#c4b58f"))
+                    out.append(self.polygon([X-19,Y+12,X-17,Y-3,X-9,Y-14,X+5,Y-16,X+17,Y-7,X+19,Y+12],"#17201d","#4c5348"))
+                    out.append(self.circle(X-22,Y-1,3,"#b6a27c"));out.append(self.circle(X+24,Y-5,3,"#b6a27c"))
+                else:
+                    out.append(self.polygon([X-37,Y-18,X-24,Y-29,X+25,Y-29,X+37,Y-18,X+31,Y-12,X-31,Y-12],"#766a5d","#c4b58f"))
+                    out.append(self.rect(X-32,Y-12,10,29,"#8c806d","#c4b58f"));out.append(self.rect(X+22,Y-12,10,29,"#8c806d","#c4b58f"))
+                    out.append(self.rect(X-38,Y+16,76,6,"#766a5d","#c4b58f"))
+                    out.append(self.line(X-17,Y-8,X-17,Y+11,"#554e46",2));out.append(self.line(X+2,Y-8,X+2,Y+11,"#554e46",2))
+                out.append(self.text(X,Y+39,name,11,"#fff0d4","center"))
             elif kind in ("exit_village","exit_forest","exit_church","enter_church","exit_churchyard","exit_kingdom","exit_barracks","exit_city","exit_market","exit_throne","exit_palace"):
                 out.append(self.circle(X,Y,19,"#d7b971"));out.append(self.text(X,Y,name,11,"#1f2928","center"))
             else:
