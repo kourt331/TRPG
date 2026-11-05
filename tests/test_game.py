@@ -416,6 +416,20 @@ class GameRegressionTests(unittest.TestCase):
         labels=[item.get("s","") for item in out if item.get("t")=="t"]
         self.assertIn("단서 조사: 숲의 폐허",labels)
 
+    def test_available_story_site_shows_a_beacon_and_nearby_interaction_prompt(self):
+        g=self.new_game();g.area="숲";g.enemies=[];g.wanderers=[];g.notice_t=0
+        g.player.update(area="숲",x=960,y=660,church_quests_completed=3,king_quests=0)
+        g.draw()
+        scene=json.loads(frames[-1])
+        labels=[item.get("s","") for item in scene if item.get("t")=="t"]
+        self.assertIn("E 조사 · 마물 굴",labels)
+        self.assertIn("마물 굴",labels)
+        self.assertTrue(any(item.get("t")=="c" and item.get("y")==226 and item.get("o")=="#ffe2a0" for item in scene))
+        g.player["church_quests_completed"]=2
+        g.draw()
+        labels=[item.get("s","") for item in json.loads(frames[-1]) if item.get("t")=="t"]
+        self.assertNotIn("E 조사 · 마물 굴",labels)
+
     def test_ten_church_quests_and_prayers_finish_chapter_as_crusader(self):
         g = self.new_game()
         p = g.player

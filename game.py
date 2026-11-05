@@ -1309,7 +1309,10 @@ class Game:
             elif kind in exit_kinds:color="#e5c16e"
             elif kind=="wanderer_party":color="#86c995"
             else:color="#80b6bf"
-            out.append(self.circle(mx,my,5,color,"#17232c"))
+            if is_story_target:
+                out.append(self.circle(mx,my,10,"#f08a5b55","#ffd38b"))
+                out.append(self.circle(mx,my,5,color,"#17232c"))
+            else:out.append(self.circle(mx,my,5,color,"#17232c"))
             if kind not in ("wanderer_party",):
                 label=f"의뢰 대상: {name}" if is_monster_target else f"목표: {name}" if is_simple_target else f"단서 조사: {name}" if is_story_target else name
                 label_left=left+8;label_right=left+plot_w-8;label_width=len(label)*10
@@ -1419,6 +1422,11 @@ class Game:
                 out.append(self.text(X,Y+40,name,11,"#fff0d4","center"))
             elif kind=="story_site":
                 site_type=extra[1]
+                clue_ready=bool(self.available_story_clues(extra[0]))
+                if clue_ready:
+                    out.append(self.line(X,Y-42,X,Y-68,"#ffd27b",3))
+                    out.append(self.circle(X,Y-74,13,"#f3a64e66","#ffe2a0"))
+                    out.append(self.polygon([X,Y-84,X+7,Y-74,X,Y-64,X-7,Y-74],"#ffd27b","#fff0bd"))
                 out.append(self.oval(X-32,Y+12,64,14,"#15251faa"))
                 if site_type=="cave":
                     out.append(self.polygon([X-30,Y+11,X-27,Y-6,X-16,Y-23,X,Y-29,X+18,Y-22,X+29,Y-5,X+31,Y+11],"#777365","#c4b58f"))
@@ -1429,7 +1437,7 @@ class Game:
                     out.append(self.rect(X-32,Y-12,10,29,"#8c806d","#c4b58f"));out.append(self.rect(X+22,Y-12,10,29,"#8c806d","#c4b58f"))
                     out.append(self.rect(X-38,Y+16,76,6,"#766a5d","#c4b58f"))
                     out.append(self.line(X-17,Y-8,X-17,Y+11,"#554e46",2));out.append(self.line(X+2,Y-8,X+2,Y+11,"#554e46",2))
-                out.append(self.text(X,Y+39,name,11,"#fff0d4","center"))
+                out.append(self.text(X,Y+39,name,12,"#ffd88a" if clue_ready else "#fff0d4","center"))
             elif kind in ("exit_village","exit_forest","exit_church","enter_church","exit_churchyard","exit_kingdom","exit_barracks","exit_city","exit_market","exit_throne","exit_palace"):
                 out.append(self.circle(X,Y,19,"#d7b971"));out.append(self.text(X,Y,name,11,"#1f2928","center"))
             else:
@@ -1444,6 +1452,10 @@ class Game:
         next_level_xp=max(1,p["level"]*35);xp_ratio=max(0,min(1,p["xp"]/next_level_xp))
         out.append(self.text(690,20,f"HP {p['hp']}/{p['maxhp']}   MP {p['mp']}/{p['maxmp']}",14,"#e7e9dc"));out.append(self.text(690,45,f"Lv.{p['level']} XP {p['xp']}/{next_level_xp} · {p['gold']}G · 붕대 {p['bandages']}개",13,"#e7e9dc"))
         out.append(self.rect(690,59,230,5,"#303b42"));out.append(self.rect(690,59,230*xp_ratio,5,"#e2c783"))
+        nearby=self.nearest()
+        if nearby and nearby[3]=="story_site" and self.available_story_clues(nearby[4]) and self.notice_t<=0 and not self.dialog:
+            out.append(self.rect(350,506,260,40,"#17232cf2","#f0b45d"))
+            out.append(self.text(480,526,f"E 조사 · {nearby[0]}",15,"#ffe2a0","center"))
         out.append(self.rect(20,557,920,30,"#111b24dd"));out.append(self.text(32,572,f"{self.area}  ·  WASD/방향키 이동  ·  E 상호작용  ·  M 지도  ·  Q 퀘스트  ·  I 소지품  ·  H 붕대",13,"#e8ddc8"))
         if self.notice_t>0:
             out.append(self.rect(150,444,660,104,"#101923ef","#d8c08d"))
