@@ -64,6 +64,38 @@ class GameRegressionTests(unittest.TestCase):
             g.start("신앙 검증")
         self.assertEqual(g.player["religion"], "교회 신앙")
 
+    def test_village_reactions_distinguish_race_religion_and_discovered_story(self):
+        g=self.new_game();p=g.player
+        p.update(race="수인",religion="숲의 신앙",job="전사",story_flags=[])
+        forest_beastkin=g.npc_reaction("villager")
+        self.assertIn("수인이고 숲의 신앙",forest_beastkin)
+        p.update(race="인간",religion="왕실 신앙")
+        human_royalist=g.npc_reaction("villager")
+        self.assertIn("왕실 신앙",human_royalist)
+        self.assertNotEqual(forest_beastkin,human_royalist)
+        p["story_flags"]=["chapter1:church:3"]
+        self.assertIn("흔적의 소문",g.npc_reaction("villager"))
+
+    def test_thief_gets_no_village_quest_and_residents_show_suspicion(self):
+        g=self.new_game();g.area="마을";g.enemies=[]
+        g.player.update(area="마을",x=700,y=300,job="도둑",faction="방랑자",race="인간",religion="숲의 신앙")
+        g.interact()
+        self.assertEqual(g.dialog["title"],"마을 주민")
+        self.assertIn("주민은 네 손을 살피며 의뢰를 맡기지 않는다",g.dialog["text"])
+        self.assertEqual(g.dialog["options"],["나가기"])
+
+    def test_shop_greeting_reflects_race_markup_and_each_religion(self):
+        g=self.new_game()
+        for race,faith,expected in (
+            ("인간","교회 신앙","교회 신앙의 표식"),
+            ("인간","왕실 신앙","왕실 신앙의 표식"),
+            ("인간","숲의 신앙","숲의 신앙"),
+            ("수인","숲의 신앙","가격을 5% 올린다"),
+        ):
+            g.player.update(race=race,religion=faith)
+            g.open_shop()
+            self.assertIn(expected,g.dialog["text"])
+
     def test_all_area_scenes_render(self):
         g = self.new_game()
         for area, (width, height) in game.MAP_SIZE.items():
@@ -357,6 +389,14 @@ class GameRegressionTests(unittest.TestCase):
             self.assertNotIn("의뢰 거절",g.dialog["options"])
             self.assertEqual(g.player["priest_refusals"],0)
             self.assertEqual(g.player["quest"]["title"],"숲의 마물 퇴치")
+
+    def test_priest_greeting_acknowledges_beastkin_and_competing_faith(self):
+        g=self.new_game();g.area="교회 안";g.enemies=[]
+        g.player.update(area="교회 안",x=700,y=230,faction="교회",job="전사",race="수인",religion="왕실 신앙")
+        g.interact()
+        self.assertIn("수인 신도는 드물지만",g.dialog["text"])
+        self.assertIn("왕실 신앙은 교회의 가르침과 다르네",g.dialog["text"])
+        self.assertIn("마물 퇴치 의뢰",g.dialog["options"])
 
     def test_faction_story_clues_reveal_once_and_survive_resume(self):
         g = self.new_game()

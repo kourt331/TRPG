@@ -414,6 +414,41 @@ class Game:
 
     def open_dialog(self, title, text, options): self.dialog={"title":title,"text":text,"options":options,"text_page":0}
 
+    def npc_reaction(self, role):
+        p=self.player;race=p["race"];faith=p["religion"];job=p["job"]
+        faith_lines={
+            "교회 신앙":"교회 신앙을 믿는구나. 전쟁이 마을에 번지기 전에 주민을 도와주게.",
+            "왕실 신앙":"왕실 신앙을 따르는구나. 궁성의 명령이 이 마을까지 닿았는지 묻는다.",
+            "숲의 신앙":"숲의 옛 신앙을 아는군. 방랑자와 숲의 사정을 조금은 이해하겠네.",
+        }
+        if role=="villager":
+            race_line="수인 여행자를 경계하는 시선이 따라온다." if race=="수인" else "마을 주민이 너를 낯익은 인간 여행자로 맞는다."
+            faith_line=faith_lines.get(faith,"")
+            if race=="수인" and faith=="숲의 신앙":race_line="수인이고 숲의 신앙도 지녔군. 주민의 경계가 조금 누그러진다."
+            if job in ("도둑","도적"):return f"{race_line} {faith_line} 주민은 네 손을 살피며 의뢰를 맡기지 않는다."
+            story_line="마물 굴과 폐허에서 찾은 흔적의 소문이 이미 마을에 퍼졌다." if p.get("story_flags") else ""
+            return " ".join(part for part in (race_line,faith_line,story_line) if part)
+        if role=="merchant":
+            race_line="상인은 수인 손님에게 조심스러운 태도를 보이며 가격을 5% 올린다." if race=="수인" else "상인은 인간 손님에게 익숙한 가격을 제시한다."
+            faith_line={"교회 신앙":"교회 신앙의 표식을 보고 붕대 진열대를 가리킨다.","왕실 신앙":"왕실 신앙의 표식을 보고 왕실 물품을 권한다.","숲의 신앙":"숲의 신앙을 알아보고 숲길 여행에 필요한 물품을 권한다."}.get(faith,"")
+            return f"{race_line} {faith_line}"
+        if role=="priest":
+            race_line="수인 신도는 드물지만, 교회에 서약한 이라면 환영하네." if race=="수인" else "자네의 출신보다 지금의 서약과 봉사를 보겠네."
+            faith_line={"교회 신앙":"기도의 뜻을 아는 신도군.","왕실 신앙":"왕실 신앙은 교회의 가르침과 다르네. 교회에 서약한 동안은 의뢰를 맡을 수 있네.","숲의 신앙":"숲의 신앙을 지닌 이도 교회에 서약하면 함께 일할 수 있네."}.get(faith,"")
+            return f"{race_line} {faith_line}"
+        if role=="wanderer":
+            if race=="수인" and faith=="숲의 신앙":return "수인과 숲의 신앙을 알아본 방랑자들이 반갑게 길을 내준다."
+            if race=="수인":return "방랑자들은 수인 여행자를 반기지만, 네 신앙을 살피며 조심스럽게 말을 건다."
+            if faith=="숲의 신앙":return "숲의 신앙을 지닌 인간에게 방랑자들이 경계를 조금 푼다."
+            return f"방랑자들이 인간의 {faith} 표식을 살피며 거리를 둔다."
+        if role=="church_trainer":
+            race_line="수인 수련생에게도 교회의 문은 열려 있다." if race=="수인" else "교관이 인간 수련생에게 교회 직업의 맹세를 설명한다."
+            faith_line={"교회 신앙":"교회 신앙을 잇는 자라면 맹세를 지키게.","왕실 신앙":"왕실 신앙을 버리라는 뜻은 아니네. 교회 직업의 서약도 배워두게.","숲의 신앙":"숲의 신앙을 품은 채로도 교회 직업을 선택할 수 있네."}.get(faith,"")
+            return f"{race_line} {faith_line}"
+        if role=="kingdom_trainer":
+            return f"교관이 {faith} 신앙을 살피며 왕실에 대한 충성을 묻는다."
+        return ""
+
     def next_step_guidance(self):
         p=self.player
         if p.get("promoted"):return "제1장 완료"
@@ -548,7 +583,7 @@ class Game:
     def open_shop(self):
         p=self.player;price=self.shop_price(20)
         last="물건 훔치기" if p["job"] in ("도둑","도적") else "나가기"
-        self.open_dialog("상점",f"회복 붕대는 최대 체력의 12%를 회복해. 수인 가격 +5%. 현재 {p['gold']}G.",
+        self.open_dialog("상점",f"{self.npc_reaction('merchant')} 회복 붕대는 최대 체력의 12%를 회복해. 현재 {p['gold']}G.",
                          [f"회복 붕대 구매 · {price}G","무기 진열장","방어구 진열장",last])
 
     def open_inventory(self):
@@ -657,7 +692,7 @@ class Game:
         if kind=="enemy": self.start_battle(extra[0]);return
         if kind=="story_site":self.investigate_story_site(extra[0]);return
         if kind=="wanderer_party":
-            welcome="숲의 신앙을 가진 수인에게 무리가 반갑게 길을 내준다." if p["religion"]=="숲의 신앙" or p["race"]=="수인" else "숲의 방랑자들이 낯선 신앙을 살피며 조심스럽게 지켜본다."
+            welcome=self.npc_reaction("wanderer")
             if p["faction"]=="방랑자":self.open_dialog("방랑자 집단",f"{welcome} 떠돌이 무리가 숲길을 따라 이동 중이다.",["함께 이동하기","나가기"])
             else:self.open_dialog("방랑자 집단",f"{welcome} 함께하려면 현재 진영에서 먼저 탈퇴해야 한다.",["방랑자 진영에 합류","대화하기","나가기"])
             return
@@ -679,13 +714,13 @@ class Game:
             if p["faction"] not in ("교회", "무소속"):
                 self.open_dialog("교회 수련관","다른 진영의 직업을 버린 뒤에만 교회 직업을 얻을 수 있다. 먼저 현재 진영에서 탈퇴하자.",["다른 진영을 찾아 떠나기","나가기"]);return
             if p["prayer_due"]:self.open_dialog("교회 수련관","완료한 의뢰에 대한 기도를 먼저 마쳐야 한다.",["나가기"])
-            else:self.open_dialog("교회 수련관",f"교회 직업은 전사와 신자야. 현재 직업 {p['job']} · 기도 {p['prayer_count']}/10. 다른 진영에서 왔다면 교회 직업을 새로 선택할 수 있어.",["전사로 수련 시작","신자로 수련 시작","다른 진영을 찾아 떠나기"])
+            else:self.open_dialog("교회 수련관",f"{self.npc_reaction('church_trainer')} 교회 직업은 전사와 신자야. 현재 직업 {p['job']} · 기도 {p['prayer_count']}/10. 다른 진영에서 왔다면 교회 직업을 새로 선택할 수 있어.",["전사로 수련 시작","신자로 수련 시작","다른 진영을 찾아 떠나기"])
             return
         if kind=="priest":
             if p["faction"]=="교회" and p.get("quest"):
                 active=p["quest"]["title"]
                 self.open_dialog("성직자",f"먼저 진행 중인 의뢰 '{active}'를 마무리하게. 새 의뢰를 고를 수 없으니 거절 횟수도 늘지 않는다.",["나가기"]);return
-            faith_note="자네의 왕실 신앙은 교회의 가르침과 다르네. 그래도 교회에 서약한 동안은 의뢰를 맡을 수 있네." if p["religion"]=="왕실 신앙" else "숲의 신앙을 가진 이도 교회에 서약하면 의뢰를 맡을 수 있네." if p["religion"]=="숲의 신앙" else "기도의 뜻을 아는 자로군."
+            faith_note=self.npc_reaction("priest")
             if p["faction"]!="교회":self.open_dialog("성직자","교회 진영에 속한 직업만 교회 스토리 의뢰를 받을 수 있다. 교회 수련관에서 합류할 수 있다.",["나가기"])
             elif p["job"]=="신자":
                 prayer_option="기도 의뢰" if p["prayer_count"]<p["church_quests_completed"] else "나가기"
@@ -707,20 +742,20 @@ class Game:
         if kind=="field": self.complete_simple_quest("밭에 물 주기");return
         if kind=="cleaning": self.complete_simple_quest("교회 청소");return
         if kind=="villager":
-            if p["job"] in ("전사","기사"):
-                text="수인 여행자라면 더 조심해주게." if p["race"]=="수인" else "숲에서 마물이 내려와 가축과 주민을 위협하고 있어."
-                self.open_dialog("마을 주민",text,["마물 퇴치 의뢰","의뢰 거절","나가기"])
-            else:
-                text="수인에게는 낯선 시선을 보낸다. 숲의 방랑자들은 너를 반갑게 맞는다." if p["race"]=="수인" else "숲에서 마물이 내려와 가축과 주민을 위협하고 있어."
-                self.open_dialog("마을 주민",text,["마물 퇴치 의뢰","의뢰 거절","나가기"])
+            text=self.npc_reaction("villager")
+            if p["job"] in ("도둑","도적"):
+                self.open_dialog("마을 주민",text,["나가기"]);return
+            text+=" 숲에서 마물이 내려와 가축과 주민을 위협하고 있어."
+            self.open_dialog("마을 주민",text,["마물 퇴치 의뢰","의뢰 거절","나가기"])
             return
         if kind=="trainer_kingdom":
+            trainer_reaction=self.npc_reaction("kingdom_trainer")
             if p.get("promoted"):
                 self.open_dialog("왕실 교관","기사 승급으로 제1장을 마쳤다. 새로운 왕실 훈련과 의뢰는 다음 여정에서 이어진다.",["나가기"]);return
             if p["faction"] not in ("왕실", "무소속"):
                 self.open_dialog("왕실 교관","다른 진영의 직업을 버린 뒤에만 왕실 직업을 얻을 수 있다. 먼저 현재 진영에서 탈퇴하자.",["방랑자로 탈출하기","나가기"]);return
-            if p["faction"]=="왕실" and p["job"]=="미정":self.open_dialog("왕실 교관","왕실 도시에서 전쟁에 참여할 전사를 모집한다.",["전사로 수련 시작","왕실 토벌 의뢰","방랑자로 탈출하기"])
-            elif p["faction"]=="왕실":self.open_dialog("왕실 교관",f"왕실 직업은 전사에서 시작해 기사로 승급해. 현재 직업 {p['job']} · 왕실 의뢰 {p['king_quests']}/10.",["왕실 토벌 의뢰","승급 진행도 확인","방랑자로 탈출하기"])
+            if p["faction"]=="왕실" and p["job"]=="미정":self.open_dialog("왕실 교관",f"{trainer_reaction} 왕실 도시에서 전쟁에 참여할 전사를 모집한다.",["전사로 수련 시작","왕실 토벌 의뢰","방랑자로 탈출하기"])
+            elif p["faction"]=="왕실":self.open_dialog("왕실 교관",f"{trainer_reaction} 왕실 직업은 전사에서 시작해 기사로 승급해. 현재 직업 {p['job']} · 왕실 의뢰 {p['king_quests']}/10.",["왕실 토벌 의뢰","승급 진행도 확인","방랑자로 탈출하기"])
             else:self.open_dialog("왕실 교관","왕실 직업은 전사로 합류해 시작한다. 방랑자 진영 소속은 왕실에 들어올 수 없다.",["전사로 수련 시작","나가기"])
             return
         if kind=="king":
